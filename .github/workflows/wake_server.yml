@@ -1,4 +1,4 @@
-name: Vektal UI Auto Earn (Stealth + Proxy Mode)
+name: Vektal UI Auto Earn (Stealth + VLESS Proxy)
 
 on:
   schedule:
@@ -25,25 +25,30 @@ jobs:
           playwright install-deps
 
       # ==========================================
-      # 👇 这是新增的核心魔法：在云端服务器启动 VLESS 节点
+      # 👇 核心魔法：云端加载完整的 VLESS+Reality 节点
       # ==========================================
       - name: 启动 Xray 代理内核
         run: |
-          echo "下载 Xray-core..."
+          echo "下载完整版 Xray-core (包含路由规则库)..."
           wget -qO xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
           unzip -q xray.zip -d xray-core
           
-          echo "写入节点配置文件..."
-          cat << 'EOF' > config.json
+          echo "写入完整的节点配置文件..."
+          cat << 'EOF' > xray-core/config.json
           {
-            "log": {"loglevel": "warning"},
+            "log": { "loglevel": "warning" },
             "inbounds": [
               {
                 "tag": "socks",
                 "port": 10808,
                 "listen": "127.0.0.1",
                 "protocol": "mixed",
-                "sniffing": {"enabled": true, "destOverride": ["http", "tls", "quic", "fakedns"]}
+                "sniffing": {
+                  "enabled": true,
+                  "destOverride": ["http", "tls", "quic", "fakedns"],
+                  "routeOnly": false
+                },
+                "settings": { "auth": "noauth", "udp": true, "allowTransparent": false }
               }
             ],
             "outbounds": [
@@ -51,11 +56,21 @@ jobs:
                 "tag": "proxy",
                 "protocol": "vless",
                 "settings": {
-                  "vnext": [{
-                    "address": "nni.gfw2500.com",
-                    "port": 57345,
-                    "users": [{"id": "551d248a-ea9d-4cc3-a896-4576761d9419", "encryption": "none", "flow": "xtls-rprx-vision"}]
-                  }]
+                  "vnext": [
+                    {
+                      "address": "nni.gfw2500.com",
+                      "port": 57345,
+                      "users": [
+                        {
+                          "id": "551d248a-ea9d-4cc3-a896-4576761d9419",
+                          "email": "t@t.tt",
+                          "security": "auto",
+                          "encryption": "none",
+                          "flow": "xtls-rprx-vision"
+                        }
+                      ]
+                    }
+                  ]
                 },
                 "streamSettings": {
                   "network": "tcp",
@@ -63,36 +78,50 @@ jobs:
                   "realitySettings": {
                     "serverName": "www.amazon.com",
                     "fingerprint": "chrome",
-                    "publicKey": "rYH4wPTVzSwtpXgI3U7YxppIP6oudD-425vT7pyhj1w"
+                    "show": false,
+                    "publicKey": "rYH4wPTVzSwtpXgI3U7YxppIP6oudD-425vT7pyhj1w",
+                    "shortId": "",
+                    "spiderX": "",
+                    "mldsa65Verify": ""
                   }
-                }
+                },
+                "mux": { "enabled": false, "concurrency": -1 }
               },
-              {"tag": "direct", "protocol": "freedom"},
-              {"tag": "block", "protocol": "blackhole"}
+              { "tag": "direct", "protocol": "freedom" },
+              { "tag": "block", "protocol": "blackhole" }
             ],
             "routing": {
               "domainStrategy": "AsIs",
               "rules": [
-                {"type": "field", "outboundTag": "direct", "domain": ["geosite:cn"]},
-                {"type": "field", "outboundTag": "direct", "ip": ["geoip:cn", "geoip:private"]}
+                { "type": "field", "inboundTag": ["api"], "outboundTag": "api" },
+                { "type": "field", "port": "443", "network": "udp", "outboundTag": "block" },
+                { "type": "field", "outboundTag": "proxy", "domain": ["geosite:google"] },
+                { "type": "field", "outboundTag": "direct", "ip": ["geoip:private"] },
+                { "type": "field", "outboundTag": "direct", "domain": ["geosite:private"] },
+                { "type": "field", "outboundTag": "direct", "domain": ["domain:alidns.com", "domain:doh.pub", "domain:dot.pub", "domain:360.cn", "domain:onedns.net"] },
+                { "type": "field", "outboundTag": "direct", "ip": ["geoip:cn"] },
+                { "type": "field", "outboundTag": "direct", "domain": ["geosite:cn"] }
               ]
             }
           }
           EOF
           
           echo "在后台启动 Xray 代理服务..."
-          nohup ./xray-core/xray run -c config.json > xray.log 2>&1 &
+          cd xray-core
+          nohup ./xray run -c config.json > xray.log 2>&1 &
           
-          echo "等待 3 秒确保代理启动..."
-          sleep 3
+          echo "等待 5 秒确保代理完全启动..."
+          sleep 5
           
-          echo "测试代理连通性 (查询当前IP)..."
-          curl -x http://127.0.0.1:10808 -s https://ifconfig.me || echo "代理连接似乎有问题，但继续执行"
+          echo "测试代理连通性 (查询伪装后的IP)..."
+          curl -x socks5://127.0.0.1:10808 -s https://ifconfig.me || echo "代理测试未返回，但将继续强行执行"
+          # 退出 xray-core 目录，回到项目根目录
+          cd ..
 
       # ==========================================
-      # 👇 代理启动后，再执行我们的 Python 脚本
+      # 👇 运行你的 Python 脚本
       # ==========================================
-      - name: 在黑暗中运行印钞机
+      - name: 在黑暗中运行印钞机 (走本地代理)
         env:
           MY_COOKIE: ${{ secrets.MY_COOKIE }}
           VEKTAL_USER: ${{ secrets.PANEL_USER }}
