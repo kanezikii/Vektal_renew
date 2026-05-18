@@ -1,4 +1,4 @@
-name: Wake Up Renqi Server (macOS + VLESS)
+name: Wake Up Renqi Server (Xray Proxy Mode)
 
 on:
   schedule:
@@ -7,8 +7,7 @@ on:
 
 jobs:
   run-wake-script:
-    # 👇 核心魔法：改用苹果 macOS 机房，绕过节点商对 Azure 的封锁
-    runs-on: macos-13
+    runs-on: ubuntu-latest
     steps:
       - name: 获取代码
         uses: actions/checkout@v4
@@ -23,31 +22,40 @@ jobs:
           python -m pip install --upgrade pip
           pip install playwright requests
           playwright install chromium
+          playwright install-deps
 
-      - name: 启动 Xray 代理内核 (Mac版)
+      # ==========================================
+      # 👇 从 Secrets 读取节点 JSON 并启动代理
+      # ==========================================
+      - name: 启动 Xray 代理内核
         env:
+          # 将 GitHub Secrets 里的节点配置读取为环境变量
           NODE_CONFIG: ${{ secrets.XRAY_JSON }}
         run: |
-          echo "下载 Mac 版 Xray-core..."
-          # 注意：这里换成了 macOS 版本的 Xray
-          wget -qO xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-macos-64.zip
+          echo "下载 Xray-core..."
+          wget -qO xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
           unzip -q xray.zip -d xray-core
           
           chmod +x xray-core/xray
+          
+          echo "将 Secrets 中的节点配置安全写入文件..."
           echo "$NODE_CONFIG" > xray-core/config.json
           
           echo "在后台启动 Xray 代理服务..."
           cd xray-core
           nohup ./xray run -c config.json > xray.log 2>&1 &
           
-          echo "等待 10 秒建立连接..."
+          echo "等待 10 秒确保家宽节点连接成功..."
           sleep 10
           
-          # Mac 自带 curl，直接测试
-          curl -x http://127.0.0.1:10808 -s -m 15 https://api.ipify.org || echo "超时，但强行继续"
+          echo "测试代理连通性 (允许最长等待 15 秒)..."
+          curl -x socks5://127.0.0.1:10808 -s -m 15 https://api.ipify.org || echo "代理测试未返回，强行进入下一步"
           cd ..
 
-      - name: 运行面板唤醒脚本
+      # ==========================================
+      # 👇 运行面板唤醒脚本
+      # ==========================================
+      - name: 运行面板唤醒脚本 (走本地代理)
         env:
           PANEL_COOKIE: ${{ secrets.PANEL_COOKIE }}
           PANEL_USER: ${{ secrets.PANEL_USER }}
@@ -55,8 +63,7 @@ jobs:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
-          # 👇 Mac 环境下无需 xvfb，直接原生运行！
-          python start_server.py
+          xvfb-run --auto-servernum --server-args="-screen 0 1280x800x24" python start_server.py
 
       - name: 提取监控截图
         if: always()
