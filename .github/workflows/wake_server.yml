@@ -1,4 +1,4 @@
-name: Wake Up Renqi Server (Single Repo + Secret Proxy)
+name: Wake Up Renqi Server (WARP Proxy Mode)
 
 on:
   schedule:
@@ -25,40 +25,32 @@ jobs:
           playwright install-deps
 
       # ==========================================
-      - name: 启动 Xray 代理内核
-        env:
-          # 将刚才在 GitHub 配置的 JSON 赋值给环境变量
-          NODE_CONFIG: ${{ secrets.XRAY_JSON }}
+      # 👇 放弃 Xray，使用 Cloudflare WARP 官方客户端进行伪装
+      # ==========================================
+      - name: 启动 Cloudflare WARP 代理
         run: |
-          echo "下载完整版 Xray-core..."
-          wget -qO xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
-          unzip -q xray.zip -d xray-core
+          echo "正在安装 Cloudflare WARP 官方客户端..."
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ jammy main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          sudo apt-get update && sudo apt-get install cloudflare-warp -y
           
-          chmod +x xray-core/xray
+          echo "配置 WARP 为本地 Socks5 代理 (端口 10808)..."
+          # 自动注册并启动 WARP 的 Socks5 代理模式
+          warp-cli --accept-tos registration new
+          warp-cli --accept-tos mode proxy
+          warp-cli --accept-tos proxy port 10808
+          warp-cli --accept-tos connect
           
-          # 安全地将环境变量中的 JSON 写入配置文件
-          echo "$NODE_CONFIG" > xray-core/config.json
+          echo "等待 8 秒让 WARP 建立隧道连接..."
+          sleep 8
           
-          echo "在后台启动 Xray 代理服务..."
-          cd xray-core
-          nohup ./xray run -c config.json > xray.log 2>&1 &
-          
-          echo "等待 10 秒，让家宽节点有充足时间建立连接..."
-          sleep 10
-          
-          echo "测试代理连通性 (使用 HTTP 协议，允许最长等待 15 秒)..."
-          if curl -x http://127.0.0.1:10808 -s -m 15 https://api.ipify.org; then
-            echo -e "\n✅ 代理连接成功！可以继续执行。"
-          else
-            echo -e "\n❌ 代理测试超时或失败！打印 Xray 日志供排查："
-            cat xray.log
-          fi
-          cd ..
+          echo "测试 WARP 连通性 (查询伪装后的 Cloudflare IP)..."
+          curl -x socks5://127.0.0.1:10808 -s https://ifconfig.me || echo "WARP 测试无响应，强行进入下一步"
 
       # ==========================================
       # 👇 运行唤醒脚本，数据流走本地 10808 代理
       # ==========================================
-      - name: 运行面板唤醒脚本 (走本地代理)
+      - name: 运行面板唤醒脚本
         env:
           PANEL_COOKIE: ${{ secrets.PANEL_COOKIE }}
           PANEL_USER: ${{ secrets.PANEL_USER }}
