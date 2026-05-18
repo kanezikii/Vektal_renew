@@ -85,6 +85,14 @@ def run_server_starter():
             page.goto(SERVER_URL)
             page.wait_for_load_state("networkidle")
             time.sleep(3) 
+
+            cookie_btn = page.locator("button:has-text('Accept & Continue')").first
+            if cookie_btn.is_visible():
+                log("🍪 发现 Cookie 授权弹窗，正在点击 Accept & Continue...")
+                cookie_btn.click()
+                # 留出充足的时间让弹窗消失，并等待后台可能的安全验证加载完毕
+                time.sleep(5) 
+                page.wait_for_load_state("networkidle")
             
             # 判断是否在登录页
             if page.locator("input[type='password']").is_visible():
