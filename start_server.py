@@ -116,7 +116,21 @@ def run_server_starter():
                 log("✅ 免密直登成功，已在控制台页面！")
             
             time.sleep(3) 
-            
+
+            log("🔎 检查是否触发了反广告拦截机制...")
+            adblock_btn = page.locator("button:has-text('Recheck Now')").first
+            if adblock_btn.is_visible():
+                log("⚠️ 触发了 AdBlock 检测弹窗！正在尝试点击 Recheck Now...")
+                adblock_btn.click()
+                
+                # 等待面板重新验证广告脚本加载情况
+                time.sleep(8) 
+                page.wait_for_load_state("networkidle")
+                
+                # 如果点完还在，说明真的是被 Xray 底层拦截了
+                if adblock_btn.is_visible():
+                    log("❌ Recheck 失败！请务必检查并移除 XRAY_JSON 中的广告拦截规则 (block)！")
+                    
             # 寻找并点击 Start 按钮
             start_btn = page.locator("button:has-text('Start')").first
             
