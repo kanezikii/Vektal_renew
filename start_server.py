@@ -90,9 +90,17 @@ def run_server_starter():
             if cookie_btn.is_visible():
                 log("🍪 发现 Cookie 授权弹窗，正在点击 Accept & Continue...")
                 cookie_btn.click()
-                # 留出充足的时间让弹窗消失，并等待后台可能的安全验证加载完毕
-                time.sleep(5) 
-                page.wait_for_load_state("networkidle")
+            
+                log("⏳ 等待面板后台保存 Cookie 状态...")
+                time.sleep(10) 
+            
+                saving_text = page.locator("text=Saving panel cookie consent...")
+                if saving_text.is_visible() or cookie_btn.is_visible():
+                    log("⚠️ 发现弹窗卡在保存状态（可能是广告追踪脚加载失败）。")
+                    log("🔄 本地授权大概率已写入，直接强行刷新页面突破障碍！")
+                    page.reload()
+                    page.wait_for_load_state("networkidle")
+                    time.sleep(5)
             
             # 判断是否在登录页
             if page.locator("input[type='password']").is_visible():
