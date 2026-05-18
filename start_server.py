@@ -60,7 +60,8 @@ def run_server_starter():
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=False, 
-            proxy={"server": "socks5://127.0.0.1:10808"}, # 强制走本地 Xray 家宽代理
+            # 💡 修复点 1：统一使用更稳定的 http 代理通道
+            proxy={"server": "http://127.0.0.1:10808"},
             args=['--disable-blink-features=AutomationControlled', '--no-sandbox']
         )
         context = browser.new_context(
@@ -74,21 +75,23 @@ def run_server_starter():
             log("🍪 成功注入身份 Cookie")
 
         page = context.new_page()
-        log("🚀 启动浏览器，访问 renqi 服务器面板...")
+        # 💡 修复点 2：为家宽代理设置全局默认超时为 60 秒 (60000ms)
+        page.set_default_timeout(60000)
+        
+        log("🚀 启动浏览器，通过纯净家宽访问 renqi 面板...")
         
         try:
-            page.goto(SERVER_URL, timeout=30000)
+            page.goto(SERVER_URL)
             page.wait_for_load_state("networkidle")
             time.sleep(3) 
             
-            # 精准判断：只有存在密码框，才是真正的登录页
             if page.locator("input[type='password']").is_visible():
                 log("⚠️ 发现密码框，Cookie 失效，启动账号密码备用登录方案...")
                 page.locator("input[type='text'], input[name='user'], input[id='user']").first.fill(PANEL_USER)
                 page.locator("input[type='password']").fill(PANEL_PASS)
                 page.locator("button[type='submit']").click()
                 
-                page.wait_for_url("**/server/**", timeout=20000)
+                page.wait_for_url("**/server/**")
                 page.wait_for_load_state("networkidle")
                 log("✅ 账号密码登录成功！")
             else:
@@ -96,21 +99,19 @@ def run_server_starter():
             
             time.sleep(3) 
             
-            # 寻找并点击 Start 按钮
             start_btn = page.locator("button:has-text('Start')").first
             
             if start_btn.is_visible():
                 log("▶️ 发现 Start 按钮，正在点击启动...")
                 start_btn.click()
                 
-                # 等待倒计时出现并读取它
                 log("⏳ 已点击启动，等待面板响应倒计时...")
                 time.sleep(5) 
                 
                 countdown_text = "未知"
                 try:
                     auto_stop_element = page.locator("text=/Auto Stop:/i").first
-                    countdown_text = auto_stop_element.inner_text(timeout=5000)
+                    countdown_text = auto_stop_element.inner_text(timeout=10000)
                     log(f"⏰ 成功捕获倒计时状态: {countdown_text}")
                 except Exception:
                     log("⚠️ 未能抓取到倒计时文本，可能面板响应较慢。")
