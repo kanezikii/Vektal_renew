@@ -1,4 +1,4 @@
-name: Wake Up Renqi Server (Single Repo + Full VLESS Proxy)
+name: Wake Up Renqi Server (Single Repo + Secret Proxy)
 
 on:
   schedule:
@@ -25,335 +25,39 @@ jobs:
           playwright install-deps
 
       # ==========================================
-      # 👇 启动 Xray 代理内核 (注入完整版节点配置)
-      # ==========================================
       - name: 启动 Xray 代理内核
+        env:
+          # 将刚才在 GitHub 配置的 JSON 赋值给环境变量
+          NODE_CONFIG: ${{ secrets.XRAY_JSON }}
         run: |
           echo "下载完整版 Xray-core..."
           wget -qO xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
           unzip -q xray.zip -d xray-core
           
-          # 赋予最高执行权限
           chmod +x xray-core/xray
           
-          echo "写入完整的节点配置文件..."
-          cat << 'EOF' > xray-core/config.json
-          {
-            "log": {
-              "loglevel": "warning"
-            },
-            "dns": {
-              "hosts": {
-                "dns.google": [
-                  "8.8.8.8",
-                  "8.8.4.4",
-                  "2001:4860:4860::8888",
-                  "2001:4860:4860::8844"
-                ],
-                "dns.alidns.com": [
-                  "223.5.5.5",
-                  "223.6.6.6",
-                  "2400:3200::1",
-                  "2400:3200:baba::1"
-                ],
-                "one.one.one.one": [
-                  "1.1.1.1",
-                  "1.0.0.1",
-                  "2606:4700:4700::1111",
-                  "2606:4700:4700::1001"
-                ],
-                "1dot1dot1dot1.cloudflare-dns.com": [
-                  "1.1.1.1",
-                  "1.0.0.1",
-                  "2606:4700:4700::1111",
-                  "2606:4700:4700::1001"
-                ],
-                "cloudflare-dns.com": [
-                  "104.16.249.249",
-                  "104.16.248.249",
-                  "2606:4700::6810:f8f9",
-                  "2606:4700::6810:f9f9"
-                ],
-                "dns.cloudflare.com": [
-                  "104.16.132.229",
-                  "104.16.133.229",
-                  "2606:4700::6810:84e5",
-                  "2606:4700::6810:85e5"
-                ],
-                "dot.pub": [
-                  "1.12.12.12",
-                  "120.53.53.53"
-                ],
-                "doh.pub": [
-                  "1.12.12.12",
-                  "120.53.53.53"
-                ],
-                "dns.quad9.net": [
-                  "9.9.9.9",
-                  "149.112.112.112",
-                  "2620:fe::fe",
-                  "2620:fe::9"
-                ],
-                "dns.yandex.net": [
-                  "77.88.8.8",
-                  "77.88.8.1",
-                  "2a02:6b8::feed:0ff",
-                  "2a02:6b8:0:1::feed:0ff"
-                ],
-                "dns.sb": [
-                  "185.222.222.222",
-                  "2a09::"
-                ],
-                "dns.umbrella.com": [
-                  "208.67.220.220",
-                  "208.67.222.222",
-                  "2620:119:35::35",
-                  "2620:119:53::53"
-                ],
-                "dns.sse.cisco.com": [
-                  "208.67.220.220",
-                  "208.67.222.222",
-                  "2620:119:35::35",
-                  "2620:119:53::53"
-                ],
-                "engage.cloudflareclient.com": [
-                  "162.159.192.1"
-                ]
-              },
-              "servers": [
-                {
-                  "address": "https://dns.alidns.com/dns-query",
-                  "domains": [
-                    "domain:alidns.com",
-                    "domain:doh.pub",
-                    "domain:dot.pub",
-                    "domain:360.cn",
-                    "domain:onedns.net",
-                    "nni.gfw2500.com"
-                  ],
-                  "skipFallback": true
-                },
-                {
-                  "address": "https://cloudflare-dns.com/dns-query",
-                  "domains": [
-                    "geosite:google"
-                  ],
-                  "skipFallback": true
-                },
-                {
-                  "address": "https://dns.alidns.com/dns-query",
-                  "domains": [
-                    "geosite:private",
-                    "geosite:cn"
-                  ],
-                  "skipFallback": true
-                },
-                {
-                  "address": "223.5.5.5",
-                  "domains": [
-                    "full:dns.alidns.com",
-                    "full:cloudflare-dns.com"
-                  ],
-                  "skipFallback": true
-                },
-                "https://cloudflare-dns.com/dns-query"
-              ]
-            },
-            "inbounds": [
-              {
-                "tag": "socks",
-                "port": 10808,
-                "listen": "127.0.0.1",
-                "protocol": "mixed",
-                "sniffing": {
-                  "enabled": true,
-                  "destOverride": [
-                    "http",
-                    "tls",
-                    "quic",
-                    "fakedns"
-                  ],
-                  "routeOnly": false
-                },
-                "settings": {
-                  "auth": "noauth",
-                  "udp": true,
-                  "allowTransparent": false
-                }
-              }
-            ],
-            "outbounds": [
-              {
-                "tag": "proxy",
-                "protocol": "vless",
-                "settings": {
-                  "vnext": [
-                    {
-                      "address": "nni.gfw2500.com",
-                      "port": 57345,
-                      "users": [
-                        {
-                          "id": "551d248a-ea9d-4cc3-a896-4576761d9419",
-                          "email": "t@t.tt",
-                          "security": "auto",
-                          "encryption": "none",
-                          "flow": "xtls-rprx-vision"
-                        }
-                      ]
-                    }
-                  ]
-                },
-                "streamSettings": {
-                  "network": "tcp",
-                  "security": "reality",
-                  "realitySettings": {
-                    "serverName": "www.amazon.com",
-                    "fingerprint": "chrome",
-                    "show": false,
-                    "publicKey": "rYH4wPTVzSwtpXgI3U7YxppIP6oudD-425vT7pyhj1w",
-                    "shortId": "",
-                    "spiderX": "",
-                    "mldsa65Verify": ""
-                  }
-                },
-                "mux": {
-                  "enabled": false,
-                  "concurrency": -1
-                }
-              },
-              {
-                "tag": "direct",
-                "protocol": "freedom"
-              },
-              {
-                "tag": "block",
-                "protocol": "blackhole"
-              }
-            ],
-            "routing": {
-              "domainStrategy": "AsIs",
-              "rules": [
-                {
-                  "type": "field",
-                  "inboundTag": [
-                    "api"
-                  ],
-                  "outboundTag": "api"
-                },
-                {
-                  "type": "field",
-                  "port": "443",
-                  "network": "udp",
-                  "outboundTag": "block"
-                },
-                {
-                  "type": "field",
-                  "outboundTag": "proxy",
-                  "domain": [
-                    "geosite:google"
-                  ]
-                },
-                {
-                  "type": "field",
-                  "outboundTag": "direct",
-                  "ip": [
-                    "geoip:private"
-                  ]
-                },
-                {
-                  "type": "field",
-                  "outboundTag": "direct",
-                  "domain": [
-                    "geosite:private"
-                  ]
-                },
-                {
-                  "type": "field",
-                  "outboundTag": "direct",
-                  "ip": [
-                    "223.5.5.5",
-                    "223.6.6.6",
-                    "2400:3200::1",
-                    "2400:3200:baba::1",
-                    "119.29.29.29",
-                    "1.12.12.12",
-                    "120.53.53.53",
-                    "2402:4e00::",
-                    "2402:4e00:1::",
-                    "180.76.76.76",
-                    "2400:da00::6666",
-                    "114.114.114.114",
-                    "114.114.115.115",
-                    "114.114.114.119",
-                    "114.114.115.119",
-                    "114.114.114.110",
-                    "114.114.115.110",
-                    "180.184.1.1",
-                    "180.184.2.2",
-                    "101.226.4.6",
-                    "218.30.118.6",
-                    "123.125.81.6",
-                    "140.207.198.6",
-                    "1.2.4.8",
-                    "210.2.4.8",
-                    "52.80.66.66",
-                    "117.50.22.22",
-                    "2400:7fc0:849e:200::4",
-                    "2404:c2c0:85d8:901::4",
-                    "117.50.10.10",
-                    "52.80.52.52",
-                    "2400:7fc0:849e:200::8",
-                    "2404:c2c0:85d8:901::8",
-                    "117.50.60.30",
-                    "52.80.60.30"
-                  ]
-                },
-                {
-                  "type": "field",
-                  "outboundTag": "direct",
-                  "domain": [
-                    "domain:alidns.com",
-                    "domain:doh.pub",
-                    "domain:dot.pub",
-                    "domain:360.cn",
-                    "domain:onedns.net"
-                  ]
-                },
-                {
-                  "type": "field",
-                  "outboundTag": "direct",
-                  "ip": [
-                    "geoip:cn"
-                  ]
-                },
-                {
-                  "type": "field",
-                  "outboundTag": "direct",
-                  "domain": [
-                    "geosite:cn"
-                  ]
-                }
-              ]
-            }
-          }
-          EOF
+          # 安全地将环境变量中的 JSON 写入配置文件
+          echo "$NODE_CONFIG" > xray-core/config.json
           
           echo "在后台启动 Xray 代理服务..."
           cd xray-core
           nohup ./xray run -c config.json > xray.log 2>&1 &
           
-          echo "等待 8 秒确保家宽节点建立安全连接..."
-          sleep 8
+          echo "等待 10 秒，让家宽节点有充足时间建立连接..."
+          sleep 10
           
-          echo "测试代理连通性..."
-          if curl -x socks5://127.0.0.1:10808 -s https://ifconfig.me; then
+          echo "测试代理连通性 (使用 HTTP 协议，允许最长等待 15 秒)..."
+          if curl -x http://127.0.0.1:10808 -s -m 15 https://api.ipify.org; then
             echo -e "\n✅ 代理连接成功！可以继续执行。"
           else
-            echo -e "\n❌ 代理测试彻底失败！正在打印 Xray 运行日志排查原因："
+            echo -e "\n❌ 代理测试超时或失败！打印 Xray 日志供排查："
             cat xray.log
           fi
           cd ..
 
+      # ==========================================
+      # 👇 运行唤醒脚本，数据流走本地 10808 代理
+      # ==========================================
       - name: 运行面板唤醒脚本 (走本地代理)
         env:
           PANEL_COOKIE: ${{ secrets.PANEL_COOKIE }}
