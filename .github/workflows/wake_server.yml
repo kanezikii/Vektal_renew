@@ -29,17 +29,16 @@ jobs:
       # ==========================================
       - name: 启动 Xray 代理内核
         env:
-          # 将 GitHub Secrets 里的节点配置读取为环境变量
           NODE_CONFIG: ${{ secrets.XRAY_JSON }}
         run: |
           echo "下载 Xray-core..."
           wget -qO xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
           unzip -q xray.zip -d xray-core
-          
           chmod +x xray-core/xray
           
           echo "将 Secrets 中的节点配置安全写入文件..."
-          echo "$NODE_CONFIG" > xray-core/config.json
+          # 使用 Python 写入，完美避免 Bash echo 导致的换行和转义字符丢失问题
+          python -c "import os; open('xray-core/config.json', 'w', encoding='utf-8').write(os.environ.get('NODE_CONFIG', ''))"
           
           echo "在后台启动 Xray 代理服务..."
           cd xray-core
@@ -49,7 +48,15 @@ jobs:
           sleep 10
           
           echo "测试代理连通性 (允许最长等待 15 秒)..."
-          curl -x socks5://127.0.0.1:10808 -s -m 15 https://api.ipify.org || echo "代理测试未返回，强行进入下一步"
+          if ! curl -x socks5://127.0.0.1:10808 -s -m 15 https://api.ipify.org; then
+            echo "❌ 代理测试失败！打印 Xray 运行日志排查原因："
+            echo "----------------------------------------"
+            cat xray.log
+            echo "----------------------------------------"
+            exit 1  # 阻止工作流继续运行
+          else
+            echo -e "\n✅ 代理连接成功！"
+          fi
           cd ..
 
       # ==========================================
